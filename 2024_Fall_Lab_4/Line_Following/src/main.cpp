@@ -191,22 +191,6 @@ void loop() {
   Encoder enc2(M2_ENC_A, M2_ENC_B);
 
   while(true) {
-
-    // int linePos = getPosition(false);
-
-    // if(linePos <= 5) {
-    //   Serial.print("Turn right!\n");
-    //   M1_forward(100);
-    //   M2_stop();
-    // } else if (linePos >= 7) {
-    //   Serial.print("Turn left!\n");
-    //   M1_stop();
-    //   M2_forward(100);
-    // } else {
-    //   Serial.print("Drive Forward!\n");
-    //   M1_forward(100);
-    //   M2_forward(100);
-    // }
     int u;
     int rightWheelPWM;
     int leftWheelPWM;
@@ -227,14 +211,17 @@ void loop() {
     u = Kp * e + Kd * d_e + Ki * total_e;
     rightWheelPWM = 100;
     leftWheelPWM = 100;
+    if (pos > 6) {
+      int leftMotorSpeed = rightWheelPWM - u;
+      int rightMotorSpeed = rightWheelPWM + u;
+    } else {
+      int leftMotorSpeed = rightWheelPWM + u;
+      int rightMotorSpeed = rightWheelPWM - u;
+    }
 
-    int leftMotorSpeed = rightWheelPWM + u;
-    int rightMotorSpeed = rightWheelPWM + u;
-
-
-    M1_forward(rightWheelPWM + u);
+    M1_forward(rightWheelPWM);
     Serial.print("Right motor @ " + (rightWheelPWM + u));
-    M2_forward(leftWheelPWM + u);
+    M2_forward(leftWheelPWM);
     Serial.print("Left motor @ " + (leftWheelPWM + u));
 
     // Check for corners
