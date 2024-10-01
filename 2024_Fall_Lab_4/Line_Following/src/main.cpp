@@ -50,13 +50,9 @@ float d_e;
 float total_e;
 
 // Assign values to the following feedback constants:
-float Kp = 1;
-float Kd = 1;
-float Ki = 1;
-
-// Encoder enc1(M1_ENC_A, M1_ENC_B);
-// Encoder enc2(M2_ENC_A, M2_ENC_B);
-
+float Kp = 2;
+float Kd = 70;
+float Ki = .01;
 
 /*
  *  Line sensor functions
@@ -118,6 +114,23 @@ float getPosition(bool whiteLine) {
   return start_of_line + (line_count / 2); // Return the detected center of the line
 }
 
+// Function not yet finished
+bool turnDirection(bool whiteLine) {
+  int lineValue = 0;
+  if (whiteLine) {
+    lineValue = 1;
+  } 
+
+  int line_count = 0;
+  for(int i = 0; i < 13; i++) { // Iterate through the lineArray
+    readADC();
+    digitalConvert();
+    if(lineArray[i] == lineValue) { // Check each value to see if it detects a line
+      line_count += 1; // Increment line count by one
+    }
+  }
+}
+
 /*
  *  Movement functions
  */
@@ -149,12 +162,30 @@ void M2_stop() {
 }
 
 // When calling turnCorner, right = true, left = false
-void turnCorner(bool turningRight) {
+void turnCorner(bool turningRight, int leftStart, int rightStart) {
   /* 
    * Use the encoder readings to turn the robot 90 degrees clockwise or 
    * counterclockwise depending on the argument. You can calculate when the 
    * robot has turned 90 degrees using either the IMU or the encoders + wheel measurements
    */
+  Encoder enc1(M1_ENC_A, M1_ENC_B);
+  Encoder enc2(M2_ENC_A, M2_ENC_B);
+
+  while (true) {
+    if (turningRight) {
+      M1_forward(80);
+      M2_backward(100);
+      if (abs(enc2.read() - rightStart) > 90) {
+        return;
+      }
+    } else {
+      M1_forward(80);
+      M2_backward(100);
+      if (abs(enc2.read() - rightStart) > 90) {
+        return;
+      }
+    }
+  }
 }
 
 /*
@@ -191,6 +222,7 @@ void loop() {
   Encoder enc2(M2_ENC_A, M2_ENC_B);
 
   while(true) {
+
     int u;
     int rightWheelPWM;
     int leftWheelPWM;
@@ -199,35 +231,67 @@ void loop() {
     readADC();
     digitalConvert();
 
-    pos = getPosition(false);
+    pos = getPosition(true);
     
     // Define the PID errors
-    e = mid - pos;
+    int e = mid - pos;
     int prev_e = e;
-    d_e = e - prev_e; 
-    total_e = e + prev_e;
+    int d_e = e - prev_e; 
+    int total_e;
+    if (pos > -1) {
+      total_e = total_e + prev_e;
+    }
 
     // Implement PID control (include safeguards for when the PWM values go below 0 or exceed maximum)
     u = Kp * e + Kd * d_e + Ki * total_e;
-    rightWheelPWM = 100;
+
+    // If no line was detected, set u to 0 since pos defaults to -1 if nothing detected
+    if (pos == -1) {
+      u = 0;
+    } 
+  
+    rightWheelPWM = 80;
     leftWheelPWM = 100;
-    if (pos > 6) {
-      int leftMotorSpeed = rightWheelPWM - u;
-      int rightMotorSpeed = rightWheelPWM + u;
-    } else {
-      int leftMotorSpeed = rightWheelPWM + u;
-      int rightMotorSpeed = rightWheelPWM - u;
+    int leftMotorSpeed; 
+    int rightMotorSpeed;
+
+    leftMotorSpeed = rightWheelPWM - u;
+    rightMotorSpeed = rightWheelPWM + u;
+
+    // Ensure that the motor speeds are not negative or over the PWM limit
+    if (leftMotorSpeed > 120) {
+      leftMotorSpeed = 120;
+    } else if (leftMotorSpeed < 50) {
+      leftMotorSpeed = 50;
     }
 
-    M1_forward(rightWheelPWM);
-    Serial.print("Right motor @ " + (rightWheelPWM + u));
-    M2_forward(leftWheelPWM);
-    Serial.print("Left motor @ " + (leftWheelPWM + u));
+    if (rightMotorSpeed > 120) {
+      rightMotorSpeed = 120;
+    } else if (rightMotorSpeed < 50) {
+      rightMotorSpeed = 50;
+    }
+
+    // Run the motors
+    M1_forward(rightMotorSpeed);
+    M2_forward(leftMotorSpeed);
+
+    // Print values
+    // Serial.print("\nPos value: ");
+    // Serial.print(pos);
+    // Serial.print("\nU value: ");
+    // Serial.print(u);
+    // Serial.print("\nRight motor: ");
+    // Serial.print(rightMotorSpeed);
+    // Serial.print("\nLeft motor: ");
+    // Serial.print(leftMotorSpeed);
+    // Serial.print("\n");
+    //delay(1000);
+    
 
     // Check for corners
-    // if(/* Condition for corner */) {
-    //   turnCorner(/* Arguments */);
-    // }
+    if(pos == -1) {
+      turnCorner(true, enc1.read(), enc2.read());
+    }
 
   }
 }
