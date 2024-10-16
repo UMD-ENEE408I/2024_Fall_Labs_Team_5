@@ -114,20 +114,51 @@ float getPosition(bool whiteLine) {
   return start_of_line + (line_count / 2); // Return the detected center of the line
 }
 
-// Function not yet finished
+// Determines which direction to turn, true = right, false = left
 bool turnDirection(bool whiteLine) {
   int lineValue = 0;
   if (whiteLine) {
     lineValue = 1;
   } 
 
+  int line_start = 0;
+  for(int i = 0; i < 13; i++) { // Iterate through the lineArray
+    readADC();
+    digitalConvert();
+    if(lineArray[i] == lineValue) { // Check each value to see if it detects a line
+      line_start = i; // Increment line count by one
+      break;
+    }
+  }
+  if (line_start > 3) {
+    return true; //turn right
+  } else {
+    return false; //turn left
+  }
+}
+
+// Determines if the robot should turn based off the amount of detected lines.
+bool should_turn(bool whiteLine) {
+  // This portion of code sets up the detection algorithm with the correct orientation of line color (depending on input)
+  int lineValue = 0;
+  if (whiteLine) {
+    lineValue = 1;
+  } 
+
   int line_count = 0;
+
   for(int i = 0; i < 13; i++) { // Iterate through the lineArray
     readADC();
     digitalConvert();
     if(lineArray[i] == lineValue) { // Check each value to see if it detects a line
       line_count += 1; // Increment line count by one
     }
+  }
+
+  if (line_count >= 6 && line_count < 12) {
+    return true; // Since the majority of the line sensors detected a line, turn!
+  } else {
+    return false; // Don't turn
   }
 }
 
@@ -161,7 +192,6 @@ void M2_stop() {
   ledcWrite(M2_IN_2_CHANNEL, PWM_MAX);
 }
 
-// When calling turnCorner, right = true, left = false
 void turnCorner(bool turningRight, int leftStart, int rightStart) {
   /* 
    * Use the encoder readings to turn the robot 90 degrees clockwise or 
@@ -171,17 +201,19 @@ void turnCorner(bool turningRight, int leftStart, int rightStart) {
   Encoder enc1(M1_ENC_A, M1_ENC_B);
   Encoder enc2(M2_ENC_A, M2_ENC_B);
 
+  Serial.print("\nStarting Turn!");
+
   while (true) {
     if (turningRight) {
       M1_forward(80);
       M2_backward(100);
-      if (abs(enc2.read() - rightStart) > 90) {
+      if (abs(enc2.read() - rightStart) > 75) {
         return;
       }
     } else {
       M1_forward(80);
       M2_backward(100);
-      if (abs(enc2.read() - rightStart) > 90) {
+      if (abs(enc2.read() - rightStart) > 75) {
         return;
       }
     }
@@ -221,6 +253,9 @@ void loop() {
   Encoder enc1(M1_ENC_A, M1_ENC_B);
   Encoder enc2(M2_ENC_A, M2_ENC_B);
 
+  // Change this depending on white line on blackbackground (true) or black line on white background (false)
+  bool white_line = true;
+
   while(true) {
 
     int u;
@@ -231,7 +266,7 @@ void loop() {
     readADC();
     digitalConvert();
 
-    pos = getPosition(true);
+    pos = getPosition(white_line);
     
     // Define the PID errors
     int e = mid - pos;
@@ -289,8 +324,8 @@ void loop() {
     
 
     // Check for corners
-    if(pos == -1) {
-      turnCorner(true, enc1.read(), enc2.read());
+    if(should_turn(white_line)) {
+      turnCorner(turnDirection(white_line), enc1.read(), enc2.read());
     }
 
   }
