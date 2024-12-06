@@ -7,15 +7,25 @@ struct __attribute__((packed)) Data {
     int16_t seq;     // sequence number
     int32_t distance; // distance
     float voltage;   // voltage
-    char text[50];   // text
+    char text[10];   // text
 };
 
 // WiFi network credentials
-const char* ssid = "ENEE408I";
-const char* password = "ENEE408I";
+// const char* ssid = "ENEE408I";
+// const char* password = "ENEE408I";
 
-// Server IP and port
-const char* host = "172.17.0.1";  // jetson ip
+const char* ssid = "iPhone";
+const char* password = "rozrozroz";
+
+// const char* ssid = "Karen's Phone";
+// const char* password = "dingus1999";
+
+//const char* ssid = "rozwifi";
+//const char* password = "rambutan1to5";
+
+
+// // Server IP and port
+const char* host = "172.20.10.11";  // jetson ip
 const uint16_t port = 10000;
 
 // Create a client
@@ -160,6 +170,7 @@ float getPosition(bool whiteLine) {
   for(int i = 0; i < 13; i++) { // Iterate through the lineArray
     readADC();
     digitalConvert(whiteLine);
+    //Serial.println("In get pos");
     if(i > 1) {
       if(lineArray[i] == lineValue) { // Check each value to see if it detects a line
         if(start_of_line == -1) { // Set the start_of_line value to the first value detected
@@ -169,7 +180,10 @@ float getPosition(bool whiteLine) {
       }
     }
   }
-  return start_of_line + (line_count / 2); // Return the detected center of the line
+  //Serial.println("If i see this last then int -> float is the problem");
+  //return start_of_line + (line_count / 2); // Return the detected center of the line
+
+  return start_of_line + ((line_count + 1) / 2); // Return the detected center of the line
 }
 
 // This decides what direction to turn based on the most prominent color detected
@@ -354,6 +368,7 @@ void M2_stop() {
 }
 
 void line_follow(bool white_line) {
+  //Serial.println("Start of line_follow");
   int u;
   int rightWheelPWM;
   int leftWheelPWM;
@@ -362,7 +377,11 @@ void line_follow(bool white_line) {
   readADC();
   digitalConvert(white_line);
 
+  //Serial.println("Line follower values gotted");
+
   pos = getPosition(white_line);
+
+  //Serial.println("Start PID");
 
   // Define the PID errors
   int prev_e = e;
@@ -420,8 +439,8 @@ void turnCorner(bool turningRight, int leftStart, int rightStart) {
    * counterclockwise depending on the argument. You can calculate when the 
    * robot has turned 90 degrees using either the IMU or the encoders + wheel measurements
    */
-  Encoder enc1(M1_ENC_A, M1_ENC_B);
-  Encoder enc2(M2_ENC_A, M2_ENC_B);
+  // Encoder enc1(M1_ENC_A, M1_ENC_B);
+  // Encoder enc2(M2_ENC_A, M2_ENC_B);
 
   Serial.print("\nStarting Turn!");
 
@@ -429,32 +448,40 @@ void turnCorner(bool turningRight, int leftStart, int rightStart) {
     if (turningRight) {
       if (old_rat) {
         // Old Rat
-        M1_forward(80);
-        M2_backward(80);
+        M1_forward(85);
+        M2_backward(85);
       } else {
         // New Rat
-        M1_forward(80);
-        M2_backward(80);
+        M1_forward(85);
+        M2_backward(85);
       }
+
+      delay(300);
+      return;
       
-      if (abs(enc2.read() - rightStart) > 3) {
-        return;
-      }
+      // if (abs(enc2.read() - rightStart) > 2) {
+      //   //Serial.println("Turn ended");
+      //   return;
+      // }
     } else {
 
       if (old_rat) {
         // Old Rat
-        M1_backward(80);
-        M2_forward(80);
+        M1_backward(90);
+        M2_forward(90);
       } else {
         // New Rat
-        M1_backward(80);
-        M2_forward(80);
+        M1_backward(90);
+        M2_forward(90);
       }
 
-      if (abs(enc2.read() - rightStart) > 3) {
-        return;
-      }
+      delay(300);
+      return;
+
+      // if (abs(enc2.read() - rightStart) > 2) {
+      //   //Serial.println("Turn ended");
+      //   return;
+      // }
     }
   }
 }
@@ -464,6 +491,7 @@ void followAudio() {
   // First detect where the audio is coming from
   // If the audio is detected to be a word (either "left" or "right") turn to follow that word
   // Other wise, simply go where the audio is detected
+  return;
 }
 
 // This section is to follow the dashed line section of the course
@@ -486,37 +514,38 @@ void solveMaze(int color) {
 
     // If a standard turn was detected, maze has been solved, exit function (and we're done :) )
   }
+  return;
 }
 
-void sendPkt(string msg) {
-      // Prepare data packet
-    Data data;
-    data.seq = 1;
-    data.distance = 1000;
-    data.voltage = 3.7f;
-    strncpy(data.text, msg, sizeof(data.text) - 1);
-    data.text[sizeof(data.text) - 1] = '\0'; // Ensure null termination
-    Serial.printf("seq %d distance %ld voltage %f text %s\n", data.seq, data.distance, data.voltage, data.text);
+void sendPkt(const char* msg) {
+  // Prepare data packet
+  Data data;
+  data.seq = 1;
+  data.distance = 1000;
+  data.voltage = 3.7f;
+  strncpy(data.text, msg, sizeof(data.text) - 1);
+  data.text[sizeof(data.text) - 1] = '\0'; // Ensure null termination
+  Serial.printf("seq %d distance %ld voltage %f text %s\n", data.seq, data.distance, data.voltage, data.text);
 
-    // Check if connected to the server
-    if (client.connected()) {
-      // Read server's response (if any)
-      while (client.available()) {
-        Data response;
-        client.readBytes((char*)&response, sizeof(response)); \\ Read data from the server and unpack it into the response struct
-        Serial.printf("seq %d distaace %ld voltage %f text %s\n", (int)response.seq, (long)response.distance, response.voltage, response.text);
-      }
-
-      // Send data to the server
-      client.write((uint8_t*)&data, sizeof(data));
-
-      // Increment sequence number for the next packet and add a delay between messages
-      data.seq++;
-      delay(5000); // Send data every 5 seconds
-    } else {
-      Serial.println("Disconnected from server.");
-      client.stop();
+  // Check if connected to the server
+  if (client.connected()) {
+    // Read server's response (if any)
+    while (client.available()) {
+      Data response;
+      client.readBytes((char*)&response, sizeof(response)); // Read data from the server and unpack it into the response struct
+      Serial.printf("seq %d distaace %ld voltage %f text %s\n", (int)response.seq, (long)response.distance, response.voltage, response.text);
     }
+
+    // Send data to the server
+    client.write((uint8_t*)&data, sizeof(data));
+
+    // Increment sequence number for the next packet and add a delay between messages
+    data.seq++;
+    delay(5000); // Send data every 5 seconds
+  } else {
+    Serial.println("Disconnected from server.");
+    client.stop();
+  }
 }
 
 /*
@@ -524,12 +553,14 @@ void sendPkt(string msg) {
  */
 void setup() {
   Serial.begin(115200);
+  int wifi_timer = 0;
 
     // Connect to Wi-Fi
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED && wifi_timer < 10) {
     delay(500);
     Serial.println("Connecting to WiFi...");
+    wifi_timer = wifi_timer + 1;
   }
   Serial.println("Connected to WiFi!");
 
@@ -538,7 +569,7 @@ void setup() {
     Serial.println("Connected to server!");
   } else {
     Serial.println("Connection to server failed.");
-    return;
+    //return;
   }
 
   ledcSetup(M1_IN_1_CHANNEL, freq, resolution);
@@ -574,7 +605,10 @@ void loop() {
   // Change this depending on white line on black background (true) or black line on white background (false)
   bool white_line = true;
 
-  sendPkt("helOOOOOOOOOOOOOOOOO");
+  char msg[] = "rat time";
+  sendPkt(msg);
+
+  int checkpointCounter = 0;
 
   // Assign values to the following feedback constants:
   if (old_rat) {
@@ -592,8 +626,10 @@ void loop() {
   }
 
   if (testing) {
-    dashedLine(white_line);
+    //dashedLine(white_line);
     while(true) {
+      //sendPkt(msg);
+      delay(1000);
       M1_stop();
       M2_stop();
     }
@@ -603,6 +639,7 @@ void loop() {
   Encoder enc2(M2_ENC_A, M2_ENC_B);
 
   while(true) {
+    //Serial.println("Start of loop");
 
     // int u;
     // int rightWheelPWM;
@@ -677,38 +714,56 @@ void loop() {
     //delay(1000);
 
     line_follow(white_line);
-    
+    //Serial.println("Passed line follow");
 
     // Check for corners, and turn accordingly
-    if(should_turn(white_line)) {
-      //delay(5000);
-      bool turn_direction = turnDirection(white_line);
-      // Once we detect a turn, drive forwards
+    // if(should_turn(white_line)) {
+    //   //Serial.println("Turn detected");
+    //   //delay(5000);
+    //   bool turn_direction = turnDirection(white_line);
+    //   // Once we detect a turn, drive forwards
 
-      if (old_rat) {
-      // OLD RAT
-        M1_forward(90);
-        M2_forward(90);
-      } else {
-      // NEW RAT
-        M1_forward(90);
-        M2_forward(90);
+    //   if (old_rat) {
+    //   // OLD RAT
+    //     M1_forward(90);
+    //     M2_forward(90);
+    //   } else {
+    //   // NEW RAT
+    //     M1_forward(90);
+    //     M2_forward(90);
+    //   }
+
+    //   while(!start_turn(white_line)) {
+    //     M1_forward(90);
+    //     M2_forward(90);
+    //     delay(10);
+    //     M1_stop();
+    //     M2_stop();
+    //     delay(10);
+    //   }
+    //   turnCorner(turn_direction, enc1.read(), enc2.read());
+    //   //Serial.println("We turned lets go");
+
+    // // This portion outlines what to do when a checkpoint is detected
+    // } else 
+    if(in_checkpoint(white_line)) {
+      checkpointCounter = checkpointCounter + 1;
+
+      if(checkpointCounter == 1) {
+        // Color detection aaaaaaaaaaa
       }
 
-      while(!start_turn(white_line)) {
-        M1_forward(90);
-        M2_forward(90);
-        delay(10);
-        M1_stop();
-        M2_stop();
-        delay(10);
+      if(checkpointCounter == 2) {
+        // AUDIO PART AAAAAAAAAAAAAAAAAAAAAAAA
       }
-      turnCorner(turn_direction, enc1.read(), enc2.read());
-    
 
-    // This portion outlines what to do when a checkpoint is detected
-    } else if(in_checkpoint(white_line)) {
+      if(checkpointCounter == 100) {
+        // Maze part
+      }
+
       delay(1000);
+
+
       if (old_rat) {
       // OLD RAT
         M1_forward(90);
@@ -720,6 +775,39 @@ void loop() {
       }
       delay(250);
       turnCorner(false, enc1.read(), enc2.read());
+
+      while(true) {
+        line_follow(white_line);
+        //Serial.println(getPosition(white_line));
+        if(getPosition(white_line) == -1) {
+          if (old_rat) {
+          // OLD RAT
+            M1_forward(90);
+            M2_forward(90);
+          } else {
+          // NEW RAT
+            M1_forward(90);
+            M2_forward(90);
+          }
+          delay(300);
+          turnCorner(true, enc1.read(), enc2.read());
+        }
+        if(in_checkpoint(white_line)) {
+          if (old_rat) {
+          // OLD RAT
+            M1_forward(90);
+            M2_forward(90);
+          } else {
+          // NEW RAT
+            M1_forward(90);
+            M2_forward(90);
+          }
+          delay(300);
+          turnCorner(false, enc1.read(), enc2.read());
+          break;
+        }
+      }
+      //Serial.println("Found a checkpoint AND turned wow");
       // while(true) {
       //   Serial.print("We be stuck here");
       //   // Initially turn left to start detecting turns
@@ -785,7 +873,7 @@ void loop() {
 
     // This section is for the dashed line following portion
     while(true) {
-      // break;
+      break;
       // Update this maze_color value maze_colors[1] = 0;
 
       // Call the function to follow the dashed line (might need object detection for assistance)
@@ -801,5 +889,7 @@ void loop() {
       // 1 = red, 2 = green, 3 = blue, 4 = other
       solveMaze(common_color);
     }
+
+    //Serial.println("End of loop");
   }
 }
