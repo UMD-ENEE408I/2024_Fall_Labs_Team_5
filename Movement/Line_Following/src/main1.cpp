@@ -2,6 +2,10 @@
 #include <Adafruit_MCP3008.h>
 #include <Encoder.h>
 #include <WiFi.h>
+#include <map>
+#include <string>
+#include <iostream>
+#include <functional>
 
 struct __attribute__((packed)) Data {
     int16_t seq;     // sequence number
@@ -30,6 +34,13 @@ const uint16_t port = 10000;
 
 // Create a client
 WiFiClient client;
+
+enum MessageType {
+    MAZE_JUNCTION_END,
+    CHECKPOINT_END,
+    AUDIO_END,
+    UNKNOWN
+};
 
 // ADC (line sensor)
 Adafruit_MCP3008 adc1;
@@ -94,7 +105,8 @@ int checkpoint_turns[3][3]; // For this 2D array, values of 0 represent no turn,
 // This array is to be updated in the run of the first robot, and utilized by the second
 int maze_path[15]; // This array has a max of 15 ints to represent what to do at each possible turn
 
-int maze_colors[3];
+int maze_colors[5];
+int color_counter = 0;
 int common_color = 0; // This represents the most common color, 0 = default, 1 = red, 2 = green, 3 = blue, 4 = other (purple, yellow, etc.)
 
 
@@ -337,6 +349,99 @@ bool detect_junction(bool whiteLine) {
   return false;
 }
 
+void handleMazeJunctionEnd(int data) {
+  if(data == 0) {
+    M1_backward(85);
+    M2_forward(85);
+  
+    delay(275);
+  } else if(data == 1) {
+    M1_forward(85);
+    M2_forward(85);
+  
+    delay(275);
+  } else {
+    M1_forward(85);
+    M2_backward(85);
+  
+    delay(275);
+  }
+}
+
+void handleCheckpointEnd(int data) {
+  maze_colors[color_counter] = data;
+  color_counter = color_counter + 1;
+}
+
+void handleAudioEnd(int data) {
+    std::cout << "Handling audio_end\n";
+}
+
+MessageType getMessageType(const std::string& message) {
+    static const std::map<std::string, MessageType> messageMap = {
+        {"maze_junction_end", MAZE_JUNCTION_END},
+        {"checkpoint_end", CHECKPOINT_END},
+        {"audio_end", AUDIO_END}
+    };
+
+    auto it = messageMap.find(message);
+    if (it != messageMap.end()) {
+        return it->second;
+    }
+    return UNKNOWN;
+}
+
+// Create a map to associate message types with functions
+std::map<MessageType, std::function<void(int data)>> messageHandlers = {
+    {MAZE_JUNCTION_END, handleMazeJunctionEnd},
+    {CHECKPOINT_END, handleCheckpointEnd},
+    {AUDIO_END, handleAudioEnd}
+};
+
+void processMessage(const std::string& message) {
+    // Split the message into type and data
+    size_t colonPos = message.find(':');
+    if (colonPos == std::string::npos) {
+        std::cout << "Invalid message format: " << message << "\n";
+        return;
+    }
+
+    std::string typeStr = message.substr(0, colonPos);
+    int data = std::stoi(message.substr(colonPos + 1));
+
+    // Get the message type
+    MessageType type = getMessageType(typeStr);
+
+    // Call the appropriate handler
+    if (messageHandlers.find(type) != messageHandlers.end()) {
+        messageHandlers[type](data);
+    } else {
+        std::cout << "Unknown message type: " << typeStr << "\n";
+    }
+}
+
+
+void sendMessage(WiFiClient& client, const std::string& message) {
+    if (client.connected()) {
+        client.print(message.c_str());
+    } else {
+        Serial.println("Client not connected. Cannot send message.");
+    }
+}
+
+// Usage examples
+void sendCheckpointStart(WiFiClient& client) {
+    sendMessage(client, "checkpoint_start");
+}
+
+void sendAudioStart(WiFiClient& client) {
+    sendMessage(client, "audio_start");
+}
+
+void sendMazeJunctionStart(WiFiClient& client) {
+    sendMessage(client, "maze_junction_start");
+}
+
 /*
  *  Movement functions
  */
@@ -402,7 +507,7 @@ void line_follow(bool white_line) {
 
   // New RAT
   rightWheelPWM = 100;
-  leftWheelPWM = 90;
+  leftWheelPWM = 105;
 
   int leftMotorSpeed; 
   int rightMotorSpeed;
@@ -448,12 +553,12 @@ void turnCorner(bool turningRight, int leftStart, int rightStart) {
     if (turningRight) {
       if (old_rat) {
         // Old Rat
-        M1_forward(85);
-        M2_backward(85);
+        M1_forward(90);
+        M2_backward(90);
       } else {
         // New Rat
-        M1_forward(85);
-        M2_backward(85);
+        M1_forward(90);
+        M2_backward(90);
       }
 
       delay(300);
@@ -484,6 +589,70 @@ void turnCorner(bool turningRight, int leftStart, int rightStart) {
       // }
     }
   }
+}
+
+void checkpointMov(bool white_line) {
+
+  delay(1000);
+
+  if (old_rat) {
+  // OLD RAT
+    M1_forward(90);
+    M2_forward(90);
+  } else {
+  // NEW RAT
+    M1_forward(90);
+    M2_forward(90);
+  }
+  delay(250);
+  turnCorner(false, 0, 0);
+  if (old_rat) {
+  // OLD RAT
+    M1_forward(90);
+    M2_forward(90);
+  } else {
+  // NEW RAT
+    M1_forward(90);
+    M2_forward(90);
+  }
+  delay(100);
+
+  while(true) {
+    line_follow(white_line);
+    //Serial.println(getPosition(white_line));
+    if(getPosition(white_line) == -1) {
+      if (old_rat) {
+      // OLD RAT
+        M1_forward(90);
+        M2_forward(90);
+      } else {
+      // NEW RAT
+        M1_forward(90);
+        M2_forward(90);
+      }
+      delay(175);
+      turnCorner(true, 0, 0);
+    }
+    if(in_checkpoint(white_line)) {
+      if (old_rat) {
+      // OLD RAT
+        M1_forward(90);
+        M2_forward(90);
+      } else {
+      // NEW RAT
+        M1_forward(90);
+        M2_forward(90);
+      }
+      delay(300);
+      // turnCorner(false, enc1.read(), enc2.read());
+
+      M1_backward(90);
+      M2_forward(90);
+      delay(300);
+      break;
+    }
+  }
+  return;
 }
 
 // This function detects where the audio comes from and what frequency the detected audio is
@@ -558,7 +727,7 @@ void setup() {
     // Connect to Wi-Fi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED && wifi_timer < 10) {
-    delay(500);
+    delay(1000);
     Serial.println("Connecting to WiFi...");
     wifi_timer = wifi_timer + 1;
   }
@@ -609,6 +778,7 @@ void loop() {
   sendPkt(msg);
 
   int checkpointCounter = 0;
+  int serverDelay = 0;
 
   // Assign values to the following feedback constants:
   if (old_rat) {
@@ -714,6 +884,7 @@ void loop() {
     //delay(1000);
 
     line_follow(white_line);
+    serverDelay = 0;
     //Serial.println("Passed line follow");
 
     // Check for corners, and turn accordingly
@@ -751,62 +922,192 @@ void loop() {
 
       if(checkpointCounter == 1) {
         // Color detection aaaaaaaaaaa
+        if(old_rat){
+          sendCheckpointStart(client);
+          while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
+          }
+        }
+        checkpointMov(white_line);
       }
 
       if(checkpointCounter == 2) {
+        // Color detection aaaaaaaaaaa
+        if(old_rat){
+          sendCheckpointStart(client);
+          while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
+          }
+        }
+        checkpointMov(white_line);
+      }
+
+      if(checkpointCounter == 3) {
+        sendAudioStart(client);
+        while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
+          }
         // AUDIO PART AAAAAAAAAAAAAAAAAAAAAAAA
+
+        // Currently hard coded to turn left
+        M1_backward(85);
+        M2_forward(85);
+      
+        delay(275);
       }
 
-      if(checkpointCounter == 100) {
-        // Maze part
-      }
-
-      delay(1000);
-
-
-      if (old_rat) {
-      // OLD RAT
-        M1_forward(90);
-        M2_forward(90);
-      } else {
-      // NEW RAT
-        M1_forward(90);
-        M2_forward(90);
-      }
-      delay(250);
-      turnCorner(false, enc1.read(), enc2.read());
-
-      while(true) {
-        line_follow(white_line);
-        //Serial.println(getPosition(white_line));
-        if(getPosition(white_line) == -1) {
-          if (old_rat) {
-          // OLD RAT
-            M1_forward(90);
-            M2_forward(90);
-          } else {
-          // NEW RAT
-            M1_forward(90);
-            M2_forward(90);
+      if(checkpointCounter == 5) {
+        // Color detection aaaaaaaaaaa
+        if(old_rat){
+          sendCheckpointStart(client);
+          while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
           }
-          delay(300);
-          turnCorner(true, enc1.read(), enc2.read());
         }
-        if(in_checkpoint(white_line)) {
-          if (old_rat) {
-          // OLD RAT
-            M1_forward(90);
-            M2_forward(90);
-          } else {
-          // NEW RAT
-            M1_forward(90);
-            M2_forward(90);
-          }
-          delay(300);
-          turnCorner(false, enc1.read(), enc2.read());
-          break;
-        }
+        checkpointMov(white_line);
       }
+
+      if(checkpointCounter == 6) {
+        // Color detection aaaaaaaaaaa
+        if(old_rat){
+          sendCheckpointStart(client);
+          while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
+          }
+        }
+        checkpointMov(white_line);
+      }
+
+      if(checkpointCounter == 7) {
+        // Color detection aaaaaaaaaaa
+        if(old_rat){
+          sendCheckpointStart(client);
+          while(serverDelay < 10) {
+            if (client.available()) {
+              std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+              processMessage(incomingMessage);
+            }
+            delay(1000);
+            serverDelay = serverDelay + 1;
+          }
+        }
+        checkpointMov(white_line);
+      }
+
+      if(checkpointCounter == 8) {
+        // End of Maze part
+        checkpointMov(white_line);
+        // Move section later
+        while(!in_checkpoint) {
+          if(old_rat){
+            if(detect_junction) {
+              // This doesnt account for the first color turn since there is no gap in the line
+              sendMazeJunctionStart(client);
+              while(serverDelay < 10) {
+                if (client.available()) {
+                  std::string incomingMessage = client.readStringUntil('\n').c_str(); // maybe remove this c_str bs
+                  processMessage(incomingMessage);
+                }
+                delay(1000);
+                serverDelay = serverDelay + 1;
+              }
+              //send and receive jetson directions based off of colors
+            }
+          }
+          if(old_rat) {
+            line_follow(white_line);
+          } else {
+            M1_forward(90);
+            M2_backward(90);
+            delay(15000);
+            break;
+          }
+          
+        }
+
+        checkpointMov(white_line);
+      }
+
+      if(checkpointCounter == 9) {
+        // WE DONE RAT RAT RAT RAT RAT
+      }
+
+
+
+      // if (old_rat) {
+      // // OLD RAT
+      //   M1_forward(90);
+      //   M2_forward(90);
+      // } else {
+      // // NEW RAT
+      //   M1_forward(90);
+      //   M2_forward(90);
+      // }
+      // delay(250);
+      // turnCorner(false, enc1.read(), enc2.read());
+
+      // while(true) {
+      //   line_follow(white_line);
+      //   //Serial.println(getPosition(white_line));
+      //   if(getPosition(white_line) == -1) {
+      //     if (old_rat) {
+      //     // OLD RAT
+      //       M1_forward(90);
+      //       M2_forward(90);
+      //     } else {
+      //     // NEW RAT
+      //       M1_forward(90);
+      //       M2_forward(90);
+      //     }
+      //     delay(300);
+      //     turnCorner(true, enc1.read(), enc2.read());
+      //   }
+      //   if(in_checkpoint(white_line)) {
+      //     if (old_rat) {
+      //     // OLD RAT
+      //       M1_forward(90);
+      //       M2_forward(90);
+      //     } else {
+      //     // NEW RAT
+      //       M1_forward(90);
+      //       M2_forward(90);
+      //     }
+      //     delay(300);
+      //     // turnCorner(false, enc1.read(), enc2.read());
+
+      //     M1_backward(90);
+      //     M2_forward(90);
+      //     delay(300);
+      //     break;
+      //   }
+      // }
+
+
       //Serial.println("Found a checkpoint AND turned wow");
       // while(true) {
       //   Serial.print("We be stuck here");
@@ -861,35 +1162,6 @@ void loop() {
       //   break;
       // }
     }
-
-    // This section is for the audio portion of the maze
-    while(true) {
-      break;
-      // Update this maze_color value maze_colors[0] = 0;
-
-      // Call the function to correctly determine where to turn (based off audio input)
-      followAudio();
-    }
-
-    // This section is for the dashed line following portion
-    while(true) {
-      break;
-      // Update this maze_color value maze_colors[1] = 0;
-
-      // Call the function to follow the dashed line (might need object detection for assistance)
-      dashedLine(white_line);
-      break;
-      // Update this maze_color value maze_colors[2] = 0;
-    }
-
-    // This section is for the color based maze portion
-    while(true) {
-      break;
-      // Call the color based maze algorithm, the input is an int representing the most common color
-      // 1 = red, 2 = green, 3 = blue, 4 = other
-      solveMaze(common_color);
-    }
-
-    //Serial.println("End of loop");
+    client.stop();
   }
 }
